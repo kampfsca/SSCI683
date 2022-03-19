@@ -1,0 +1,558 @@
+---
+title: |
+      Homework Assignment 2: Spatial Point Pattern Analysis and
+      Spatial Autocorrelation Using \bf{\sf{R}} \linebreak
+      \small SSCI 683 Spring 2022 \linebreak
+      \small `r format(Sys.Date(), '%B %d, %Y')`
+author: |
+      \normalsize Andy Kampfschulte
+output: 
+  tint::tintPdf:
+    toc: true
+latexfonts: 
+  - package: newtxmath
+    options: 
+      - cmintegrals
+      - cmbraces
+  - package: ebgaramond-maths
+  - package: nimbusmononarrow
+bibliography: skeleton.bib
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(tint)
+# invalidate cache when the package version changes
+knitr::opts_chunk$set(
+	fig.height = 5,
+	fig.width = 8,
+	message = FALSE,
+	cache = TRUE,
+	cache.extra = packageVersion("tint"),
+	tidy = FALSE,
+	warnings = FALSE
+)
+options(htmltools.dir.version = FALSE)
+
+## Packages
+
+libs <- c("ggplot2",
+          "sf",
+          "sp",
+          "spdep",
+          "dplyr",
+          "SpatialKDE",
+          "kableExtra",
+          "spatstat.core",
+          "classInt")
+
+invisible(lapply(libs, library, character.only = TRUE))
+```
+
+---
+
+\vspace{10pt}
+
+**Learning objectives:**
+
+The objectives of this homework assignment is for you to:
+
+> - Explore spatial autocorrelation using global Moran’s I and Moran Scatterplot
+ - Use kernel density estimation (KDE) and demonstrate the KDE map results
+ - Use Ripley’s K-function to evaluate the point pattern of your spatial data
+ - Interpret the output results for the dataset’s spatial dependency and spatial patterns
+
+Before getting into your own work in this assignment, you may want to follow the R scripts
+and practice the example datasets in Handout 3 for spatial autocorrelation and Handout 4 for
+KDE and Ripley’s K.
+
+
+1. Import a spatial dataset of your interest. If your data is a polygon data (e.g. a polygon
+shapefile), you can build the spatial weights matrix using contiguity-based spatial
+relationship as Handout 3. This in turns means you’d need to find another point dataset
+or, better, take centroids of your polygon data for KDE and Ripley’s K in the next steps.
+If your data is a point data, your approach to build a spatial weights matrix would need to
+be distance-based (e.g. k nearest neighbors or fixed distance).
+
+2. Conduct a series of spatial analysis in R, including:
+
+> - Creating a spatial weights matrix (SWM) appropriate for your choice of variable
+ - Applying global Moran’s I and Moran scatterplot for the variable of interest using the
+
+\newpage
+
+``` {r FUNCTIONS, echo = FALSE}
+
+# Colour Palette Function
+
+pal <- function(x){
+  p <- wesanderson::wes_palette("Zissou1", x, "continuous")
+}
+
+
+# A function to take an sf object and create a KDE raster 
+# (Not Used in this Assignment)
+
+st_kde <- function(points,cellsize, bandwith, extent = NULL){
+  require(MASS)
+  require(raster)
+  require(sf)
+  if(is.null(extent)){
+    extent_vec <- st_bbox(points)[c(1,3,2,4)]
+  } else{
+    extent_vec <- st_bbox(extent)[c(1,3,2,4)]
+  }
+  
+  n_y <- ceiling((extent_vec[4]-extent_vec[3])/cellsize)
+  n_x <- ceiling((extent_vec[2]-extent_vec[1])/cellsize)
+  
+  extent_vec[2] <- extent_vec[1]+(n_x*cellsize)-cellsize
+  extent_vec[4] <- extent_vec[3]+(n_y*cellsize)-cellsize
+  
+  coords <- st_coordinates(points)
+  matrix <- kde2d(coords[,1],coords[,2],
+                  h = bandwith,n = c(n_x,n_y),
+                  lims = extent_vec)
+  raster(matrix)
+}
+
+## Function to create a data frame to manually Plot Moran's I
+
+prepare_data <- function(data, x, listw){
+  # prepare a dataframe with variables x and wx, 
+  # from the x and listw arguments
+  # this dataframe will be the base data for the ggplot() call
+  plot_data <- data %>% 
+    mutate(
+      x = !!enquo(x),
+      wx = lag.listw(listw, x, zero.policy = TRUE),
+      label = as.character(attr(listw, "region.id"))
+    ) 
+
+  # Prepare other needed objects that don't fit into dataframe
+  xwx.lm <- lm(plot_data$wx ~ plot_data$x)
+  infl.xwx <- influence.measures(xwx.lm)
+
+  # add non variables objects as attributes
+  attr(plot_data, 
+       which = "is.inf") <- which(apply(infl.xwx$is.inf, 
+                                        1, any))
+  attr(plot_data, which = 'xwx.lm') <- xwx.lm
+
+  return(plot_data)
+}
+
+```
+
+
+
+
+# **Data Description** 
+
+
+```{r Data, include = FALSE, cache = TRUE}
+library(dplyr)
+f.2020 <- st_read("C:/Users/andyk/Documents/Projects/Firewise/data/ForestFire/AgencyHistoricFirePerimeters_2020/AgecnyHistoricFirePerimeters_2020.shp")
+f.2010 <- st_read("C:/Users/andyk/Documents/Projects/Firewise/data/ForestFire/AgencyHistoricFirePerimeters_2010_2019/AgencyHistoricFirePerimeters_2010_2019.shp")
+f.2010 <- st_read("C:/Users/andyk/Documents/Projects/Firewise/data/ForestFire/AgencyHistoricFirePerimeters_2010_2019/AgencyHistoricFirePerimeters_2010_2019.shp")
+f.2000 <- st_read("C:/Users/andyk/Documents/Projects/Firewise/data/ForestFire/AgencyHistoricFirePerimeters_2000_2009/AgencyHistoricFirePerimeters_2000_2009.shp")
+f.1990 <- st_read("C:/Users/andyk/Documents/Projects/Firewise/data/ForestFire/AgencyHistoricFirePerimeters_1990_1999/AgencyHistoricFirePerimeters_1990_1999.shp")
+
+
+ff <- rbind(f.2020, f.2010, f.2000, f.1990)
+rm(f.2020, f.2010, f.2000, f.1990)
+ff.dat <- st_drop_geometry(ff) %>% 
+  mutate(ID = paste0(gsub(" ", "", toupper(INCIDENT)), "_", FIRE_YEAR)) %>% 
+  group_by(ID) %>% 
+  slice(1)
+
+ff <- ff %>% 
+  filter(GIS_ACRES>1000) %>% 
+  st_transform(., 3310)  %>% 
+  mutate(INCIDENT = toupper(INCIDENT)) %>% 
+  group_by(INCIDENT, FIRE_YEAR) %>% 
+  mutate(ndup = n()>1,
+         keep = ifelse(ndup == FALSE, 1, 
+                       ifelse(grepl("FINAL", toupper(FEATURE_CA))==TRUE, 1, 0)),
+         ID = paste0(gsub(" ", "", INCIDENT), "_",FIRE_YEAR)) %>% 
+  filter(keep==1) %>% 
+  select(ID, INCIDENT, FIRE_YEAR, GIS_ACRES, FEATURE_CA, GEO_ID) %>% 
+  ungroup() %>% 
+  group_by(ID) %>% 
+  summarise()
+
+cali <- tigris::states(class = "sf") %>% 
+  st_transform(., 3310)
+cali <- cali[which(cali$NAME == "California"),]
+
+ff.full <- left_join(ff, ff.dat, by = "ID") %>% 
+  mutate(area = as.numeric(st_area(.))) %>% 
+  st_intersection(., cali) 
+
+
+units <- tigris::tracts(state = "CA", class = "sf") %>% 
+  st_transform(., 3310)
+
+eh <- units %>% 
+  mutate(count = lengths(st_intersects(geometry, ff.full)))
+
+
+```
+
+
+```{r, eval = FALSE, fig.margin = TRUE, fig.cap="Map of Wildifres > 1,000 Acres Since 1990. Fires are coloured proportional to the size of the fire.", echo = FALSE}
+
+ggplot(ff.full)+
+  geom_sf(data = cali, fill = "gray90")+
+  geom_sf(aes(fill = area), alpha = .6, colour = alpha("gray80", .05))+
+  scale_fill_gradientn(colours = pal(100))+
+  theme_minimal()+
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8, angle = -45, hjust = .1))
+
+```
+
+For this assignment, I will be working with Wildfire data within the state of California, in particular the frequency of wildfires larger than 1,000 acres within each census tract across the state. The wildfire data cover 30 years of fires, ranging from 1990 - 2020.
+
+California state and census-tract data were obtained using the `tigris` `r` package. This package operates on an API from the U.S. Census Bureau's TIGER database. Wildfire data were obtained from several different extracts from CALFIRE. The data include a shapefile of the area for each wildfire, along with dates, total acreage, overseeing response agencies, and a slew of additional information. To obtain the count of fires within each tract, an intersection was run between census tracts and fire shapefiles, and any part of the fire perimeter contained within a tract was counted. For brevity, I did not include the entirity of the data management scripts in this assignment, but can these be found in the attached .RMD file.
+
+
+```{r, eval = FALSE}
+Widfire_Frequency = lengths(st_intersects(tract_geometry, fire_data))
+```
+
+Given the nature of this data, and that fires often span across multiple tracts, it is likely that this will contribute to spatial autocorrelation.
+
+
+```{r, fig.margin = TRUE, fig.cap="Census Tracts in California", echo = FALSE, eval = FALSE}
+
+ggplot(units)+
+  geom_sf(fill = "gray90", colour = alpha("gray20", .5), size = .2)+
+  theme_minimal()
+
+```
+
+Some brief summary statistics are provided in Table 1. In short, there are 8,057 census tracts in California, and the number of Wildfires in these tracts from 1990-2020 ranged from 0 to 50. 
+
+```{r, echo = FALSE}
+
+sums <- eh %>% 
+  mutate(area = as.numeric(st_area(eh))/(1000^2)) %>% 
+  st_drop_geometry() %>% 
+  summarise(`Numberof Tracts` = n(),
+            `Mean Wildfire Frequency` = mean(count),
+            `Median Wildfire Frequency` = median(count),
+            `Minimum Wilfire Frequency` = min(count),
+            `Maximum Wilfire Frequency` =  max(count),
+            `Mean Tract Area (km^2)` = mean(area),
+            `Median Tract Area (km^2)` = median(area)) %>% 
+  tidyr::pivot_longer(cols = 1:7)
+
+
+
+kbl(sums, booktabs = TRUE,
+    col.names = c("", "Value"),
+    digits = c(0,3,3,2,2),
+    caption = "Summary Statistics of Wildfire Data intersected with Census Tracts",
+    linesep = c('')) %>% 
+  kable_classic_2()
+
+```
+
+
+```{r, fig.fullwidth = TRUE, fig.cap="\\textbf{Top Left:} Distribution of Wildfires (1990-2020), shaded by total area of individual fire. \\textbf{Bottom Left:} Census Tracts in California. \\textbf{Right:} Results of the Intersection of Wildfire data and Census Tracts yeidling the total frequency of wildfires within each tract.", echo = FALSE}
+
+G1 <- ggplot(ff.full)+
+  geom_sf(data = cali, fill = "gray90")+
+  geom_sf(aes(fill = area), alpha = .8, colour = alpha("gray80", .05))+
+  scale_fill_gradientn(colours = pal(100))+
+  theme_minimal()+
+  theme(legend.position = "none",
+        plot.title = element_text(size = 10, vjust = -15, hjust = .85),
+        axis.text = element_blank(),
+        legend.text = element_text(size = 8, angle = -45, hjust = .1))+
+  labs(title = "Wildfires\n1990-2020")
+
+G2 <- ggplot(units)+
+  geom_sf(fill = "gray90", colour = alpha("gray20", .5), size = .2)+
+  theme_minimal()+
+  theme(axis.text = element_blank(),
+        plot.title = element_text(size = 10, vjust = -15, hjust = .85))+
+  labs(title = "Census\nTracts")
+
+G3 <- ggplot(eh)+
+  geom_sf(aes(fill = count), colour = alpha("gray30", .4), size = .05)+
+  scale_fill_gradientn(colours = pal(100))+
+  theme_minimal()+
+  theme(legend.position = "right",
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 8),
+        plot.title = element_text(size = 10, vjust = -22, hjust = .85),
+        plot.margin = margin(0,0,0,0,"cm"))+
+  labs(title = "Intersection of Wildfire\n Frequency and\n Census Tracts",
+       fill = "Frequency")
+
+library(gridExtra)
+  
+
+grid.arrange(arrangeGrob(G1, G2), G3, nrow = 1, widths = c(.4,.6))
+
+```
+
+\newpage 
+
+# **Spatial Analyses**
+
+## **Global Moran's I**
+
+Starting with creating a neighborhood. The below code, using the `spdep` package, generates a neighborhood of California Census Tracts using the Rook's case. 
+
+```{r NEIGHBORHOOD}
+
+neighbors <- poly2nb(eh, queen = FALSE)
+
+```
+
+
+```{r NEIGHBORHOODPLOT, fig.margin = TRUE, fig.height=4, fig.width=4, echo = FALSE, fig.cap="Plot of neighborhood of census tracts in California."}
+#dev.off()
+par(mar = c(0,0,0,0))
+plot.new()
+plot(as(eh, "Spatial"), border = "lightgray")
+plot(neighbors, 
+     coordinates(as(eh, "Spatial")), 
+     add = TRUE, col = "#F21A00", 
+     points = FALSE)
+
+```
+
+
+```{r GLOBALMORAN}
+
+list <- nb2listw(neighbors, zero.policy = TRUE, 
+                 style = "minmax")
+
+GM <- moran.test(as(eh,"Spatial")$count, list, 
+                 zero.policy = TRUE)
+
+```
+
+
+That neighborhood list is then out through the `nb2listw` function to create weights of the neighborhood. I'm using the `style = "minmax"` for the coding scheme of the weights. The default coding scheme is `style = "W"`, which is row-standardized, summing over all links to a given polygon. `minmax`, on the other hand, *"divides the weights by the minimum of the maximum row sums and maximum column sums of the input weights"*. I chose this for no particular reason, other than to explore the effects of different weighting schemes on the Global Moran's I. Running everything through the `moran.test` function (and cleaned up using my own functions). We can see that the Global Moran's I is `r round(GM$estimate[[1]],3)`, and the p-value is `r GM$p.value`. Meaning that there is positive spatial autocorrelation in Wildfire frequency between census tracts in California. This makes total sense, the large swaths of forest in northern California are going to be more susceptible to fires than the metropolitan areas in Southern California, and census tracts near one another are gong to have similar levels of wildfire risks. 
+
+```{r GM Table, echo = FALSE}
+
+GM.table <- data.frame(MI = GM$estimate[[1]],
+                       EX = GM$estimate[[2]],
+                       var = GM$estimate[[3]],
+                       p = ifelse(GM$p.value < 0.001, "<0.001", GM$p.value))
+
+colnames(GM.table) <- c("Moran's I", 
+                        "Expectation",
+                        "Variance",
+                        "p-value")
+
+kbl(GM.table, booktabs = TRUE,
+    caption = "Global Moran's I Estimate") %>% 
+  kable_classic_2()
+
+```
+
+```{r, fig.fullwidth = FALSE, echo = FALSE, fig.cap= "Moran's I scatterplot. Points are sized based on Frequency of Wildfires." }
+
+moran_plot_data <- prepare_data(eh, count, list)
+
+inf_data <- moran_plot_data[attr(moran_plot_data, "is.inf"), ]
+
+ggplot(inf_data)+
+  geom_point(aes(x = x, y = wx, size = count), 
+             alpha = .6)+
+  geom_smooth(aes(x = x, y = wx), 
+              method = "lm", se = FALSE, 
+              size = 1.5, colour = pal(5)[1],
+              alpha = .75)+
+  geom_vline(xintercept = mean(inf_data$x), 
+             linetype = 2)+
+  geom_hline(yintercept = mean(inf_data$wx), 
+             linetype = 2)+
+  #geom_text(aes(x = x, y= wx+1, label = label, size = count)) +
+  labs(x = "Wildfire Frequency", 
+       y = "Spatially Lagged Wildfire Frequency",
+       size = "Frequency") +
+  theme_bw()+
+  theme(legend.position = "bottom")
+    
+```
+
+\newpage 
+
+## **Local Moran's I**
+
+Local Moran's I was generated using the `localmoran` function. These Local *I* values were then added to the data set and plotted (Figure 4). Fisher-style cuts in the distribution of I-values were made to create breaks and make the map easier to interpret.
+
+As you can see, there's very strong spatial autocorrelation in Northern & Eastern California. Again, this makes total sense, as these are the areas of the state with the highest potential to have a wildfire. Conversely, the San Fernando Valley, the high-population density areas (the bay area, and LA-San Diego), and the desert all have near zero - or at least relatively low - spatial autocorrelation. When p-values > 0.05 are eliminated, and tracts are cluster based on their quadrant position in the Moran plot (Low-Low, Low-High, High-Low, High-High)m we can see that only High-High and Low-High autocorrelated tracts are significant. Plotted onto a map, we see the High-High areas being in highly forested areas, and the Low-High tracts being directly adjacent to High-High tracts. WIthin the context of the data, this seems to make sense, as the statistically insignificant area really have no fire history, and therefore not much correlation between adjacent tracts. 
+
+```{r LOCALMORAN}
+
+LM <- localmoran(as(eh,"Spatial")$count, list, 
+                 zero.policy = TRUE)
+
+LM.map <- cbind(eh, LM)
+
+```
+
+
+```{r LOCALMORANplot, echo = FALSE, fig.fullwidth = TRUE, fig.cap = "Results of local Moran's I statistic. The figure on the left displays the Local Moran's I statistic for each census tract in california, binned into 4 categories using the Fisher's Jenks algorithm. Alpha shaded was added to fade out tracts with a p-value > 0.05. The right-hang figure shows the clustering of tracts based on Moran's I."}
+
+LM.map$cut <- cut(LM.map$Ii,
+                  breaks = classIntervals(LM.map$Ii, 
+                                          4, 
+                                          style = "fisher")[[2]])
+
+
+M1 <- ggplot(LM.map)+
+  geom_sf(aes(fill = cut, alpha = (Pr.z....E.Ii..)*-1), colour=alpha("gray30", .5), 
+          size = .05)+
+  scale_fill_manual(aesthetics = "fill", 
+                    values=pal(length(table(LM.map$cut))))+
+  scale_alpha_binned(range = c(-0.05, 1))+
+  theme_minimal()+
+  theme(legend.position = "bottom",
+        legend.title = element_text(size = 10),
+        plot.margin = margin(0,.25,0,.25, "cm"))+
+  labs(fill = "Local Moran")+
+  guides(alpha = "none",
+         fill = guide_legend(nrow = 2, byrow = TRUE))
+
+  
+boop <- inner_join(LM.map, st_drop_geometry(moran_plot_data)) %>% 
+  mutate(xcat = ifelse(x >= mean(x), "High", "Low"),
+         ycat = ifelse(wx >= mean(wx), "High", "Low"),
+         Cluster = factor(paste0(xcat,"-",ycat), 
+                          levels = c("Low-Low",
+                                     "Low-High",
+                                     "High-Low",
+                                     "High-High"))) %>% 
+  filter(Pr.z....E.Ii.. < 0.05)
+
+M2 <- ggplot(boop)+
+  geom_sf(data = units, fill = "gray80", 
+          colour=alpha("gray30", .5), size = 0.05)+
+  geom_sf(aes(fill = Cluster,
+              alpha = (Pr.z....E.Ii..)*-1), colour=alpha("gray30", .5), 
+          size = .05)+
+  scale_fill_manual(aesthetics = "fill", 
+                    values=pal(2))+
+  theme_minimal()+
+  theme(legend.position = "bottom",
+        legend.title = element_text(size = 10),
+        axis.text.y = element_blank(),
+        plot.margin = margin(0,.25,0,.25, "cm"))+
+  labs(fill = "Local Moran \nCluster")+
+  guides(alpha = "none",
+         fill = guide_legend(nrow = 2, byrow = TRUE))
+
+
+library(gridExtra)
+
+grid.arrange(arrangeGrob(M1), arrangeGrob(M2), nrow = 1)
+
+
+```
+
+\newpage 
+
+## **Kernel Density Estimation** 
+
+The `SpatialKDE` package was used to calculate kernel density of census tracts. I wanted to explore KDE estimate functions that could accept `sf` objects. There is a seperate function that manually does this in the appendix. Cell size was set 5Km and the bandwidth was set to 20,000. It could have been set to a higher value to get more peaks in additional metropolitan areas, but at the set bandwidth we can see clear densities in the LA and San Francisco Bay Area (Figure 5). When compared to fire frequency, the KDE hot spots correlate with low-fire areas with little spatial autocorrelation.
+
+```{r KDE, cache = TRUE}
+
+grid <- eh %>% 
+  create_grid_rectangular(cell_size = 5000, 
+                          side_offset = 20000)
+
+KDE <- st_centroid(eh) %>% 
+  kde(band_width = 20000, kernel = "quartic", grid = grid)
+
+KDE2 <- st_intersection(KDE, cali)
+
+```
+
+```{r, fig.fullwidth = TRUE, echo = FALSE, fig.cap = "KDE Clustering of Census Tracts in California" }
+ggplot(KDE2)+
+  geom_sf(aes(fill = kde_value), colour = NA)+
+  geom_sf(data = units, fill = NA, colour = alpha("gray80", .3), size = .05)+
+  scale_fill_gradientn(colours = pal(100))+
+  theme_minimal()+
+  labs(fill = "KDE")
+
+```
+
+\newpage 
+
+## **Ripley's K**
+
+Ripley's K was performed using the `Kest` function in the `spatstat.core` package. This is really straightforward, with the most difficult aspect was having to convert an `sf-polygon`'s centroids into an `sp-SpatialPoints` object, and then to a `ppp-object`. While there are a few different functions to accomplish converting into a `ppp-object`, I found the function in the `maptools` package to be the most consistent and agreeable with `Rmarkdown` rendering. 
+
+In addition to Ripley's K, which tests clustering under a Complete Spatial Randomness (CSR) assumption, I thought it was appropriate to also run the Ripley's K derived for inhomogeneous point-patterns, as census tracts are obviously more densly clustered in population centers. An envelope was created for each Ripley's K based on a lengthy 500 simulations (thank goodness for `Rmarkdown`'s caching). As you can see in figure 5, the standard observed Ripley's K is obscenely higher than the theoretical K under the CSR assumption, indicating High amounts of clustering. The Inhomogeneous Ripley's K is much more revealing. Given that the California-Albers 3310 projection uses a scale in meters, I divided the x-axis to convert to Km. We can see that from 0 to about 125 Km, there is higher than expected clustering of census tracts. However, beyond 150Km, there is lower than expected clustering. This is understandable, as the size of census tracts tends to increase considerably in low-population areas, dispersing the point pattern. 
+
+```{r K, cache = TRUE, warning=FALSE, message=FALSE}
+
+pp <- as(st_centroid(eh), "Spatial")
+
+ppp <- maptools::as.ppp.SpatialPoints(pp)
+
+## Normal Ripley's K
+K <- Kest(ppp, correction = "best", var.approx = TRUE)
+K.e <- envelope(ppp, Kest, correction = "best",
+                verbose = FALSE, nsim = 500)
+
+## Ripley's K for Inhomogenous point patterns
+
+Kinh <- Kinhom(ppp)
+Kinh.e <- envelope(ppp, Kinhom, correction = "best",
+                   verbose = FALSE, nsim = 500)
+
+```
+
+```{r Kplots, fig.fullwidth = TRUE, cache = TRUE, echo = FALSE, fig.cap="Plots of Ripley's K Functions"}
+K.e <- tidyr::pivot_longer(as.data.frame(K.e), cols =  2:5)
+Kinh.e <- tidyr::pivot_longer(as.data.frame(Kinh.e), cols =  2:5)
+
+K1 <- ggplot(K.e)+
+  geom_line(aes(x = r/1000, y = value, group = name, colour = name), size = 1.1, alpha = .6)+
+  scale_colour_manual(aesthetics = "colour", values = pal(4))+
+  theme_bw()+
+  theme(legend.position = "bottom", 
+        axis.text = element_text(size = 9),
+        plot.margin = margin(0,.5,0,.5, "cm"))+
+  labs(title = "Ripley's K \n ")
+
+K2 <- ggplot(Kinh.e)+
+  geom_line(aes(x = r/1000, y = value, group = name, colour = name), size = 1.1, alpha = .6)+
+  scale_colour_manual(aesthetics = "colour", values = pal(4))+
+  theme_bw()+
+  theme(legend.position = "bottom", 
+        axis.text = element_text(size = 9),
+        plot.margin = margin(0,.5,0,.5, "cm"))+
+  labs(title = "Ripley's K for Inhomogenous \nPoint Pattern")
+
+library(gridExtra)
+
+grid.arrange(arrangeGrob(K1), arrangeGrob(K2), nrow = 1)
+
+```
+
+\newpage 
+
+# **Appendix**
+
+Below are the pre-defined functions used throughout the assignment
+
+```{r, echo = TRUE}
+<<FUNCTIONS>>
+```
+

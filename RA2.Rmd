@@ -1,0 +1,37 @@
+---
+title: "SSCI 683: Reading Assignmnet 12"
+subtitle: "Surface and Feild Analysis"
+author: "Andy Kampfschulte"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Paper 
+>*Mulrooney, Timothy, et al. "A comparison of raster-based travel time surfaces against vector-based network calculations as applied in the study of rural food deserts." Applied Geography 78 (2017): 12-21.*
+
+## Responses
+
+**1. Describe the spatial methodology used in the selected article to address the problems.**
+
+> *The authors seek to use a raster-based approach to measure food deserts in southern North Carolina. Rather than examine distance or time-based measurements of food scarcity, the authors employ a Cost-Distance algorithm. Which, in their raster-based approach, measures the cost incurred to travel through each pixel. Using this framework, they develop a travel-time surface to the nearest grocery and convenience store. The authors argue this is an effective framework for modeling food deserts in rural areas. They also compare the results of their raster model to that of a vector-based approach to evaluate sensitivity; arguing that raster-based approaches are advantageous, as they are more flexible in terms of spatial resolution, and can be more scaleable.*
+
+**2. What are the strengths for the methodology used in the article and what are the
+limitations in the design of the research? What are some ways to improve the method
+design?**
+
+> *The obvious strengths of this article lie in the spatial methods. Given that the crux of the article is the comparison of raster-based approaches to vector analysis, the elaborate methods section underscores the attention to detail regarding the data sources, resolution, and data management. The thoroughness of their approach is underscored in Figure 2 which outlines their process to derive travel-time surfaces. The flow diagram is so elaborate and extensive, I found it nearly unintelligible.*
+
+> *Some weaknesses of paper, I felt, lay in the results section. As a statistician, I felt the decision to compare travel times between raster and vector approaches using a t-test was woefully ill-informed. If the null hypothesis is that there is no distinguishable difference between raster and vector-based models, then a t-test is not appropriate - it is designed to **reject the null**, never accept the null. I believe their results would have been more convincing had they engaged in some sort of equivalency testing, TOST or otherwise. In fact, the p-values in Table 3 are not particularly high (ranging from .1 - .2), undercutting their conclusions. Also, the results in Table 4, showing comparisons as sample size increases undercuts their message. Lastly, I have never seen the use of $\rho$ (rho) to represent a p-value. I feel petty bringing this up, but they seem to be confusing p-values with $rho$-values which are traditionally a measure of correlation (ie Spearman's $\rho$); and not the probability of observing a result as or more extreme under the null hypothesis.*
+
+>*Aside from nit-picking statistics, this work underscore the need for an improved NAICS database, as the definition of a "grocery store" is not well defined in this database. The authors note that walmarts have the same designation as kohl's department stores. This database appears to be central in food-scarcity studies, but does not seem to have the necessary granularity to really address food desert research with much overt certainty.*
+
+
+**3. Consider what you learned from the reading(s), how may raster data operations/analysis
+(for Week 8) and remote sensing imagery (for Week 9) be used in your own research area
+of interest?**
+
+> *This article reminded me of just how overlooked raster-based approaches are. I appreciated that the authors devoted a considerable fraction of their work to articulate the seemingly unnecessary bias toward vector-based approaches; something of which I am most definitely guilty. For as much as I obsess over the modifiable areal unit problem, I should really consider raster-approaches more often, and seek to implement them in the future.*

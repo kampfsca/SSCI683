@@ -1,0 +1,54 @@
+---
+title: "SSCI 683: Reading Assignmnet 1"
+subtitle: "GIS and Geographically Weighted Regression"
+author: "Andy Kampfschulte"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+## Papers 
+
+
+> *Sunak, Yasin, and Reinhard Madlener. "The impact of wind farm visibility on property values: A spatial difference-in-differences analysis." Energy Economics 55 (2016): 79-91.* 
+
+> *Nilsson, Pia. "Natural amenities in urban space–A geographically weighted regression approach." Landscape and Urban Planning 121 (2014): 45-54.*
+
+---
+
+## Responses
+
+
+**1. Clarify the spatial problems stated in the selected articles and summarize the key
+elements of the spatial methodology used to address the problems.**
+
+> *To complement the Nilsson article, I chose the paper by Yasin & Madlener, which also applied spatial methods to econometric data and housing costs.*
+
+> *The Nilsson article highlights the need to understand spatial heterogeneity in valuations of housing placed near natural amenities. The authors used distance-based proximity to natural areas to understand housing costs, while also accounting for residential characteristics like housing size, local crime rates, population density, etc. Geographically weighted regression was used to incoporate the spatial aspects of these data, and also contrasted against standard OLS regression techniques.*
+
+> *The Yasin artcile looked to examine the potential devaluation housing costs given the proximity to development of recent windfarms in the North-Rhine Westphalia region in Germany. Using housing data from 1992 - 2010 and adjusted form construction price index, the authors used SPatial Fixed Effects Modelling, SAC/SARAR/SE Modelling, and SDEM modelling to incorporate the spatial dependence of housing properties and the visual impact of nearby windfarms. *
+
+**2. Besides the main spatial analysis methods, pay attention to the spatial
+scales/extent/analysis units and data preparation methods chosen and executed by the
+authors. State important perspectives on these choices (if you have not done so for #1)
+and whether or not you think the choices are suitable for this study.**
+
+> *In the Nilsson paper does a good job trying to incorporate various data sources with different scales. Census-level demographics are incorporated to the point-based housing data. The study extent was a moderately-sized Jonkoping region in Sweden. Given that the extent included 6,670 housing sales over 75 census tracts, and included 1,654 natural amenities areas. I felt the spatial extent was appropriate for the analysis performed.*
+
+> *The Yasin article was impressed me with it's integration of a digital surface model with an accuracy of 1 meter. In addition, much like in the Nilsson paper, incorporation of residential characteristics at the parcel level were incorporated. The study extent was relatively narrow, only examining a selective area of 285 km^2. I find this extent more than suitable given the granularity of the DSM, and the number of housing parcels and windmills in the data.*
+
+**3. What are overall strengths for the methodology used? What are the weaknesses? What
+are some ways in which the methodology could have been refined to better address the
+problems?**
+
+> *For the Nilsson paper, a general strength was thoroughness of the methods section. The author goes into detail for each data element and how it was integrated into the analysis, while justifying it's addition to the GWR. This attention to detail makes the results more interpretable, transparent, and most of all reproducible. The Regression results are presented clearly, and comparisons between models are easy to make. The weaknesses that I found with the paper stem mostly from the data available to perform the analysis.*
+
+> *The strengths of the Yasin paper complement well the weaknesses of the Nilsson paper in that the detail of the data used in their analysis provided for a much more granular understanding of their research question. Rather than making crude distance-based estimates on the visual impact of windmills, they integrated a digital surface model to incorporate topography, angles, and vegetative features to place windmill proximity in a much more defined spatial context, which had to improve the sensitivity of their modelling. Also, their quasi-experimental approach incorporated temporal effects of the construction of wind farms, which allowed the researchers to examine the impacts of windfarm development in a treatment vs. control paradigm.*
+
+> *The weaknesses of the Yasin paper stem from the analytical approaches used. While the data sources and integration were thorough, and several models were performed (Spatial Fixed Effects, SAC/SARARA/SE, and SDEM) to account for different kinds of spatial heterogeneity, the authors note - rightly - that these approaches are not quite ideal in incorporating the spatio-temporal dynamics of the data; most particularly the spatial effects model.*
